@@ -1,5 +1,5 @@
 {
-  "name": "markdown-render",
+  "name": "@kennyfrc/markdown-render",
   "version": "0.1.0",
   "description": "CLI that renders Markdown to styled HTML and opens it in the default browser",
   "type": "module",
@@ -7,6 +7,11 @@
     "markdown-render": "./dist/markdown-render.js",
     "mdr": "./dist/markdown-render.js"
   },
+  "files": [
+    "dist",
+    "template",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",

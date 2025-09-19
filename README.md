@@ -13,11 +13,33 @@ CLI utility written in TypeScript that converts a Markdown file to styled HTML, 
 
 ## Installation
 
+### Install globally from npm
+
+```
+npm install --global @kennyfrc/markdown-render
+```
+
+After installation you can invoke the CLI from any directory.
+
+Both `markdown-render` and the shorter alias `mdr` point to the same executable:
+
+```
+mdr README.md --style geist-prose
+```
+
+### Run without installing
+
+```
+npx @kennyfrc/markdown-render README.md --stdout
+```
+
+### Install from source (development)
+
 ```
 npm install --global .
 ```
 
-The `prepare` script compiles the TypeScript sources, so the published `dist/` artifacts stay current. After installation you can run `markdown-render <file.md>` from anywhere.
+The `prepare` script compiles the TypeScript sources during install and publish so the `dist/` artifacts stay current.
 
 ## Usage
 
@@ -63,6 +85,15 @@ The generated HTML includes:
 - `npm install` – install dependencies and compile TypeScript.
 - `npm run build` – compile TypeScript to `dist/` and refresh the Mustache-rendered CLI output.
 - `npm run typecheck` – run the TypeScript compiler without emitting files.
+
+## Publishing (maintainers)
+
+1. Ensure you are logged in with publishing rights: `npm login`.
+2. Run the checks: `npm run typecheck` and `npm run build`.
+3. Bump the version (for example `npm version patch`).
+4. Publish to the public registry: `npm publish --access public`.
+
+`npm publish` runs the `prepare` script so the compiled `dist/` output is included automatically. See the [npm publish docs](https://docs.npmjs.com/cli/publish) for more details.
 
 ## Testing
 
