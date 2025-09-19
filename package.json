@@ -4,12 +4,14 @@
   "description": "CLI that renders Markdown to styled HTML and opens it in the default browser",
   "type": "module",
   "bin": {
-    "markdown-render": "./dist/markdown-render.js"
+    "markdown-render": "./dist/markdown-render.js",
+    "mdr": "./dist/markdown-render.js"
   },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "prepare": "tsc"
+    "prepare": "tsc",
+    "link": "npm run build && npm link"
   },
   "keywords": [
     "markdown",

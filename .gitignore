@@ -25,3 +25,4 @@ __MACOSX
 
 # Build artifacts
 dist/
+node_modules/
