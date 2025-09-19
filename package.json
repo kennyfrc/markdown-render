@@ -1,6 +1,6 @@
 {
   "name": "@kennyfrc/markdown-render",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "CLI that renders Markdown to styled HTML and opens it in the default browser",
   "type": "module",
   "bin": {
