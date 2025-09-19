@@ -48,6 +48,11 @@ const TEMPLATE_PATH = fileURLToPath(new URL('../template/document.mustache', imp
 
 let templateCache: Promise<string> | undefined;
 
+interface RenderedMarkdown {
+  htmlBody: string;
+  mermaidDetected: boolean;
+}
+
 async function main(): Promise<void> {
   let parsedArgs: ParsedArgs;
   try {
@@ -93,9 +98,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  const htmlBody = await marked.parse(markdownContent);
+  const {htmlBody, mermaidDetected} = await renderMarkdown(markdownContent);
   const title = deriveTitle(markdownContent, markdownPath);
-  const htmlDocument = await renderHtmlDocument({title, body: htmlBody, theme: parsedArgs.theme}, preset);
+  const htmlDocument = await renderHtmlDocument({title, body: htmlBody, theme: parsedArgs.theme}, preset, {mermaidDetected});
 
   if (parsedArgs.flags.has('--stdout')) {
     process.stdout.write(htmlDocument);
@@ -117,11 +122,33 @@ async function main(): Promise<void> {
   }
 }
 
-async function renderHtmlDocument({title, body, theme}: HtmlDocumentInput, preset: StylePreset): Promise<string> {
+async function renderMarkdown(markdownContent: string): Promise<RenderedMarkdown> {
+  let mermaidDetected = false;
+  const processed = markdownContent.replace(/```mermaid\s*([\s\S]*?)```/g, (_match, code) => {
+    mermaidDetected = true;
+    const trimmed = code.replace(/\s+$/, '');
+    return `\n<div class="mermaid">${escapeHtml(trimmed)}</div>\n`;
+  });
+
+  const htmlBody = await marked.parse(processed);
+  return {htmlBody, mermaidDetected};
+}
+
+interface RenderOptions {
+  mermaidDetected: boolean;
+}
+
+async function renderHtmlDocument({title, body, theme}: HtmlDocumentInput, preset: StylePreset, options: RenderOptions): Promise<string> {
   const template = await loadTemplate();
   const colorScheme = theme === 'auto' ? 'light dark' : theme;
   const styles = buildStyles(theme, preset, colorScheme);
   const fontImports = preset.fontImports.join('\n    ');
+  const headScripts = options.mermaidDetected
+    ? '<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>'
+    : '';
+  const bodyScripts = options.mermaidDetected
+    ? '<script>if (window.mermaid) { mermaid.initialize({ startOnLoad: true, theme: "default" }); }</script>'
+    : '';
 
   return Mustache.render(template, {
     title,
@@ -129,6 +156,8 @@ async function renderHtmlDocument({title, body, theme}: HtmlDocumentInput, prese
     styles,
     colorScheme,
     fontImports,
+    headScripts,
+    bodyScripts,
     bodyClass: `preset-${preset.id}`
   });
 }
@@ -378,6 +407,15 @@ function emitError(message: string): void {
 
 function emitWarning(message: string): void {
   process.stderr.write(`Warning: ${message}\n`);
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function printStyles(): void {

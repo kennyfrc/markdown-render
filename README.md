@@ -9,6 +9,7 @@ CLI utility written in TypeScript that converts a Markdown file to styled HTML, 
 - Launches the default browser cross-platform via [`open`](https://github.com/sindresorhus/open).
 - Generates semantic HTML via a Mustache template (`template/document.mustache`) with responsive typography and code-friendly styling that adapts to light or dark mode automatically, with CLI overrides when needed.
 - Defaults to a Geist Sans + Geist Mono stack with Tailwind Prose-inspired spacing, with additional presets (including Inter UI) selectable at runtime.
+- Renders fenced `mermaid` code blocks as interactive diagrams via Mermaid.js when present.
 - Outputs to stdout or skips browser launching for scripting and automated scenarios.
 
 ## Installation
@@ -71,6 +72,30 @@ mdr --list-styles
 ```
 
 Preset styles load fonts from the relevant CDNs (for example Google Fonts for Geist/Inter). When offline, the HTML falls back to system fonts.
+
+### Mermaid diagrams
+
+Code fences labelled `mermaid` are detected automatically and rendered in the browser using Mermaid.js. For example:
+
+```mermaid
+graph TD
+  A[Markdown] --> B[markdown-render]
+  B --> C{HTML}
+  C -->|opens| D[Browser]
+```
+
+<small>Source</small>:
+
+````markdown
+```mermaid
+graph TD
+  A[Markdown] --> B[markdown-render]
+  B --> C{HTML}
+  C -->|opens| D[Browser]
+```
+````
+
+No extra flags are needed—the CLI injects the Mermaid runtime only when such blocks are present.
 
 ### Respecting light and dark mode
 

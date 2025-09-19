@@ -96,9 +96,14 @@
    - Need to ensure gradient backgrounds maintain readability with prose colors.
 
 9. **Backup Approach**
-   - If external font imports problematic, fall back to self-hosted Inter (via npm `@fontsource/inter`) and provide instructions to link local Geist clone; degrade gracefully to system fonts when imports disabled.
+- If external font imports problematic, fall back to self-hosted Inter (via npm `@fontsource/inter`) and provide instructions to link local Geist clone; degrade gracefully to system fonts when imports disabled.
 
 ## Research Sources
 - DesignGrapes, *The 7 Must-Have Fonts That Will Rule UI/UX Design in 2024* (Inter popularity in Figma/UX community).
 - Vercel, *geist-font* README (usage patterns and Tailwind integration for Geist Sans/Mono).
 - Tailwind CSS Blog, *Tailwind CSS Typography v0.5* (dark mode support, color scales, element modifiers for prose customization).
+
+## Mermaid Diagram Support (Add-on)
+- Preprocess fenced \`\`\`mermaid code blocks into `<pre class="mermaid">…</pre>` before Markdown parsing while HTML-escaping diagram definitions.
+- Inject Mermaid.js via jsDelivr CDN only when such blocks are detected, along with an inline initializer (`mermaid.initialize({ startOnLoad: true })`).
+- Document in README that no extra flags are required; diagrams render automatically in the browser.
