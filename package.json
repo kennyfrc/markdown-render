@@ -1,0 +1,32 @@
+{
+  "name": "markdown-render",
+  "version": "0.1.0",
+  "description": "CLI that renders Markdown to styled HTML and opens it in the default browser",
+  "type": "module",
+  "bin": {
+    "markdown-render": "./dist/markdown-render.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "prepare": "tsc"
+  },
+  "keywords": [
+    "markdown",
+    "cli",
+    "html",
+    "browser"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/mustache": "^4.2.6",
+    "marked": "^16.3.0",
+    "mustache": "^4.2.0",
+    "open": "^10.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "typescript": "^5.9.2"
+  }
+}
