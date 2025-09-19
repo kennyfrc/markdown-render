@@ -10,6 +10,8 @@ import Mustache from 'mustache';
 import {marked} from 'marked';
 import open from 'open';
 
+import {listPresets, resolvePreset, StylePreset} from './presets.js';
+
 type ThemePreference = 'auto' | 'light' | 'dark';
 
 interface ParsedArgs {
@@ -17,6 +19,8 @@ interface ParsedArgs {
   flags: Set<'--no-open' | '--stdout'>;
   theme: ThemePreference;
   showHelp: boolean;
+  styleId: string;
+  listStyles: boolean;
 }
 
 interface HtmlDocumentInput {
@@ -25,20 +29,7 @@ interface HtmlDocumentInput {
   theme: ThemePreference;
 }
 
-interface Palette {
-  light: ThemePalette;
-  dark: ThemePalette;
-}
-
-interface ThemePalette {
-  background: string;
-  foreground: string;
-  codeBackground: string;
-  codeForeground: string;
-  border: string;
-  link: string;
-  linkHover: string;
-}
+const DEFAULT_STYLE_ID = 'geist-prose';
 
 const HELP_TEXT = `Usage: markdown-render <markdown-file> [options]
 
@@ -47,6 +38,8 @@ Options:
   --no-open             Generate the HTML file but skip launching the browser.
   --stdout              Print the generated HTML to standard output.
   --theme <mode>        Override auto detection with "light" or "dark".
+  --style <id>          Apply a typography/background preset (default: ${DEFAULT_STYLE_ID}).
+  --list-styles         Print available style presets and exit.
   --light               Shortcut for "--theme light".
   --dark                Shortcut for "--theme dark".
 `;
@@ -65,6 +58,11 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (parsedArgs.listStyles) {
+    printStyles();
+    return;
+  }
+
   if (parsedArgs.showHelp) {
     process.stdout.write(HELP_TEXT);
     return;
@@ -73,6 +71,13 @@ async function main(): Promise<void> {
   if (parsedArgs.positional.length !== 1) {
     emitError('Please provide exactly one markdown file.');
     process.stdout.write(HELP_TEXT);
+    process.exitCode = 1;
+    return;
+  }
+
+  const preset = resolvePreset(parsedArgs.styleId);
+  if (!preset) {
+    emitError(`Unknown style "${parsedArgs.styleId}". Use --list-styles to see available options.`);
     process.exitCode = 1;
     return;
   }
@@ -90,7 +95,7 @@ async function main(): Promise<void> {
 
   const htmlBody = await marked.parse(markdownContent);
   const title = deriveTitle(markdownContent, markdownPath);
-  const htmlDocument = await renderHtmlDocument({title, body: htmlBody, theme: parsedArgs.theme});
+  const htmlDocument = await renderHtmlDocument({title, body: htmlBody, theme: parsedArgs.theme}, preset);
 
   if (parsedArgs.flags.has('--stdout')) {
     process.stdout.write(htmlDocument);
@@ -112,17 +117,19 @@ async function main(): Promise<void> {
   }
 }
 
-async function renderHtmlDocument({title, body, theme}: HtmlDocumentInput): Promise<string> {
+async function renderHtmlDocument({title, body, theme}: HtmlDocumentInput, preset: StylePreset): Promise<string> {
   const template = await loadTemplate();
-  const palette = getPalette(theme);
   const colorScheme = theme === 'auto' ? 'light dark' : theme;
-  const styles = buildStyles(theme, palette, colorScheme);
+  const styles = buildStyles(theme, preset, colorScheme);
+  const fontImports = preset.fontImports.join('\n    ');
 
   return Mustache.render(template, {
     title,
     body,
     styles,
-    colorScheme
+    colorScheme,
+    fontImports,
+    bodyClass: `preset-${preset.id}`
   });
 }
 
@@ -165,7 +172,7 @@ const SHARED_STYLES = `    body {
       border: 1px solid var(--border);
     }
     code {
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-family: var(--font-mono);
       background: var(--code-bg);
       color: var(--code-fg);
       padding: 0.15rem 0.35rem;
@@ -200,49 +207,20 @@ const SHARED_STYLES = `    body {
     }
 `;
 
-function getPalette(theme: ThemePreference): Palette {
-  const lightPalette: ThemePalette = {
-    background: '#ffffff',
-    foreground: '#1f2933',
-    codeBackground: '#f1f5f9',
-    codeForeground: '#0f172a',
-    border: '#cbd5f5',
-    link: '#2563eb',
-    linkHover: '#1d4ed8'
-  };
-
-  const darkPalette: ThemePalette = {
-    background: '#0f172a',
-    foreground: '#e2e8f0',
-    codeBackground: '#1e293b',
-    codeForeground: '#e2e8f0',
-    border: '#334155',
-    link: '#93c5fd',
-    linkHover: '#bfdbfe'
-  };
-
-  if (theme === 'light') {
-    return {light: lightPalette, dark: lightPalette};
-  }
-
-  if (theme === 'dark') {
-    return {light: darkPalette, dark: darkPalette};
-  }
-
-  return {light: lightPalette, dark: darkPalette};
-}
-
-function buildStyles(theme: ThemePreference, palette: Palette, colorScheme: string): string {
+function buildStyles(theme: ThemePreference, preset: StylePreset, colorScheme: string): string {
+  const basePalette = theme === 'dark' ? preset.palette.dark : preset.palette.light;
   const rootBlock = `    :root {
       color-scheme: ${colorScheme};
-      --bg: ${palette.light.background};
-      --fg: ${palette.light.foreground};
-      --code-bg: ${palette.light.codeBackground};
-      --code-fg: ${palette.light.codeForeground};
-      --border: ${palette.light.border};
-      --link: ${palette.light.link};
-      --link-hover: ${palette.light.linkHover};
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --bg: ${basePalette.background};
+      --fg: ${basePalette.foreground};
+      --code-bg: ${basePalette.codeBackground};
+      --code-fg: ${basePalette.codeForeground};
+      --border: ${basePalette.border};
+      --link: ${basePalette.link};
+      --link-hover: ${basePalette.linkHover};
+      --font-body: ${preset.fontFamily};
+      --font-heading: ${preset.headingFontFamily ?? preset.fontFamily};
+      --font-mono: ${preset.monoFontFamily ?? 'SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace'};
       line-height: 1.6;
     }
 `;
@@ -250,19 +228,32 @@ function buildStyles(theme: ThemePreference, palette: Palette, colorScheme: stri
   const darkBlock = theme === 'auto'
     ? `    @media (prefers-color-scheme: dark) {
       :root {
-        --bg: ${palette.dark.background};
-        --fg: ${palette.dark.foreground};
-        --code-bg: ${palette.dark.codeBackground};
-        --code-fg: ${palette.dark.codeForeground};
-        --border: ${palette.dark.border};
-        --link: ${palette.dark.link};
-        --link-hover: ${palette.dark.linkHover};
+        --bg: ${preset.palette.dark.background};
+        --fg: ${preset.palette.dark.foreground};
+        --code-bg: ${preset.palette.dark.codeBackground};
+        --code-fg: ${preset.palette.dark.codeForeground};
+        --border: ${preset.palette.dark.border};
+        --link: ${preset.palette.dark.link};
+        --link-hover: ${preset.palette.dark.linkHover};
       }
     }
 `
     : '';
 
-  return [rootBlock, darkBlock, SHARED_STYLES].filter((chunk) => chunk.length > 0).join('\n');
+  const typographyBlock = `    body {
+      font-family: var(--font-body);
+    }
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-heading);
+    }
+    code, pre code {
+      font-family: var(--font-mono);
+    }
+`;
+
+  return [rootBlock, darkBlock, SHARED_STYLES, typographyBlock, preset.extraCSS ?? '']
+    .filter((chunk) => chunk.length > 0)
+    .join('\n');
 }
 
 function deriveTitle(markdownContent: string, sourcePath: string): string {
@@ -296,6 +287,8 @@ function parseArguments(args: string[]): ParsedArgs {
   const flags = new Set<'--no-open' | '--stdout'>();
   let theme: ThemePreference = 'auto';
   let showHelp = false;
+  let styleId = DEFAULT_STYLE_ID;
+  let listStyles = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -307,6 +300,11 @@ function parseArguments(args: string[]): ParsedArgs {
 
     if (token === '--no-open' || token === '--stdout') {
       flags.add(token);
+      continue;
+    }
+
+    if (token === '--list-styles') {
+      listStyles = true;
       continue;
     }
 
@@ -335,6 +333,21 @@ function parseArguments(args: string[]): ParsedArgs {
       continue;
     }
 
+    if (token.startsWith('--style=')) {
+      styleId = token.split('=')[1] ?? DEFAULT_STYLE_ID;
+      continue;
+    }
+
+    if (token === '--style') {
+      const next = args[index + 1];
+      if (!next) {
+        throw new Error('Missing value for --style. Use --list-styles to inspect options.');
+      }
+      styleId = next;
+      index += 1;
+      continue;
+    }
+
     if (token.startsWith('--')) {
       throw new Error(`Unknown option: ${token}`);
     }
@@ -342,7 +355,7 @@ function parseArguments(args: string[]): ParsedArgs {
     positional.push(token);
   }
 
-  return {positional, flags, theme, showHelp};
+  return {positional, flags, theme, showHelp, styleId, listStyles};
 }
 
 function parseTheme(raw: string): ThemePreference {
@@ -365,6 +378,12 @@ function emitError(message: string): void {
 
 function emitWarning(message: string): void {
   process.stderr.write(`Warning: ${message}\n`);
+}
+
+function printStyles(): void {
+  const presets = listPresets();
+  const lines = presets.map((preset) => `- ${preset.id}: ${preset.label} — ${preset.description}`);
+  process.stdout.write(`${lines.join('\n')}\n`);
 }
 
 main().catch((error: unknown) => {

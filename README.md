@@ -8,6 +8,7 @@ CLI utility written in TypeScript that converts a Markdown file to styled HTML, 
 - Uses [`marked`](https://marked.js.org/) for fast, CommonMark-compatible Markdown parsing.
 - Launches the default browser cross-platform via [`open`](https://github.com/sindresorhus/open).
 - Generates semantic HTML via a Mustache template (`template/document.mustache`) with responsive typography and code-friendly styling that adapts to light or dark mode automatically, with CLI overrides when needed.
+- Defaults to a Geist Sans + Geist Mono stack with Tailwind Prose-inspired spacing, with additional presets (including Inter UI) selectable at runtime.
 - Outputs to stdout or skips browser launching for scripting and automated scenarios.
 
 ## Installation
@@ -22,17 +23,32 @@ The `prepare` script compiles the TypeScript sources, so the published `dist/` a
 
 ```
 markdown-render <markdown-file> [options]
+mdr <markdown-file> [options]
 
 Options:
   -h, --help            Show usage instructions.
   --no-open             Do not launch the browser after generating HTML.
   --stdout              Print the generated HTML to standard output instead of writing to a temp file.
   --theme <mode>        Force a theme: "light", "dark", or "auto" (default: auto).
+  --style <id>          Typography/background preset (default: geist-prose).
+  --list-styles         Print available presets and exit.
   --light               Shortcut for "--theme light".
   --dark                Shortcut for "--theme dark".
 ```
 
 The CLI writes the rendered HTML to a temporary directory such as `~/Library/Caches/TemporaryItems/markdown-render-*` on macOS and opens that file in your default browser. The output path is printed to stdout for reference.
+
+### Styling presets
+
+Presets bundle font imports, color palettes, and background treatments inspired by the Inter and Geist communities plus Tailwind CSS prose defaults.
+
+```
+mdr README.md --style geist-prose --theme auto
+mdr README.md --style inter-ui --dark --stdout > preview.html
+mdr --list-styles
+```
+
+Preset styles load fonts from the relevant CDNs (for example Google Fonts for Geist/Inter). When offline, the HTML falls back to system fonts.
 
 ### Respecting light and dark mode
 
@@ -52,10 +68,11 @@ The generated HTML includes:
 
 Manual smoke checks for now:
 
-1. `node dist/markdown-render.js --help` – emits usage instructions.
-2. `node dist/markdown-render.js README.md --stdout | head` – renders Markdown to HTML without opening the browser.
-3. `node dist/markdown-render.js README.md --theme dark --stdout | head` – verifies theme overriding works and the generated CSS changes palettes.
-4. `MARKDOWN_RENDER_NO_OPEN=1 node dist/markdown-render.js README.md` – writes HTML to the temp directory while suppressing browser launch (useful in CI).
+- `node dist/markdown-render.js --help` – emits usage instructions.
+- `node dist/markdown-render.js README.md --stdout | head` – renders Markdown to HTML without opening the browser.
+- `node dist/markdown-render.js README.md --style inter-ui --stdout | grep "fonts.googleapis"` – confirms preset font imports appear in the head.
+- `node dist/markdown-render.js README.md --style geist-prose --theme dark --stdout | head` – verifies style and dark-mode overrides.
+- `MARKDOWN_RENDER_NO_OPEN=1 node dist/markdown-render.js README.md` – writes HTML to the temp directory while suppressing browser launch (useful in CI).
 
 ## Roadmap
 
