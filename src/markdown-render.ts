@@ -5,7 +5,6 @@ import {basename, extname, join, resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
-
 import Mustache from 'mustache';
 import {marked} from 'marked';
 import open from 'open';
@@ -122,13 +121,114 @@ async function main(): Promise<void> {
   }
 }
 
+interface MermaidDiagram {
+  index: number;
+  code: string;
+}
+
+interface MermaidValidationError {
+  index: number;
+  code: string;
+  error: string;
+}
+
+interface MermaidLintRule {
+  pattern: RegExp;
+  message: string;
+  suggestion: string;
+}
+
+// Common mermaid syntax issues that can be detected statically
+const MERMAID_LINT_RULES: MermaidLintRule[] = [
+  {
+    pattern: /note\s+(?:right|left)\s+of\s+\w+\s*\n\s+[^\n]+\s*\n\s*end\s+note/i,
+    message: 'Multi-line notes with "end note" are not supported in stateDiagram-v2',
+    suggestion: 'Use single-line syntax: note right of StateName : Your note text',
+  },
+  {
+    pattern: /state\s+"[^"]+"\s+as\s+\w+\s*\{[^}]*note\s+/i,
+    message: 'Notes inside state blocks are not supported',
+    suggestion: 'Move notes outside the state block: note right of StateName : text',
+  },
+  {
+    pattern: /`[^`]+`/,
+    message: 'Backticks inside diagram text can cause parsing errors',
+    suggestion: 'Remove backticks or use quotes instead',
+  },
+  {
+    pattern: /stateDiagram-v2[\s\S]*\{[\s\S]*\{/,
+    message: 'Nested curly braces in stateDiagram can cause issues',
+    suggestion: 'Flatten the state structure or use composite states correctly',
+  },
+];
+
+function validateMermaidDiagrams(diagrams: MermaidDiagram[]): MermaidValidationError[] {
+  if (diagrams.length === 0) return [];
+  
+  const errors: MermaidValidationError[] = [];
+  
+  for (const diagram of diagrams) {
+    for (const rule of MERMAID_LINT_RULES) {
+      if (rule.pattern.test(diagram.code)) {
+        errors.push({
+          index: diagram.index,
+          code: diagram.code,
+          error: `${rule.message}\n   Suggestion: ${rule.suggestion}`,
+        });
+        break; // Only report first matching error per diagram
+      }
+    }
+  }
+  
+  return errors;
+}
+
+function formatMermaidErrors(errors: MermaidValidationError[]): string {
+  const lines: string[] = [];
+  
+  for (const err of errors) {
+    lines.push(`\n┌─ Mermaid Diagram #${err.index + 1} ─────────────────────────────────`);
+    lines.push(`│ Error: ${err.error}`);
+    lines.push(`│`);
+    lines.push(`│ Source:`);
+    for (const line of err.code.split('\n').slice(0, 10)) {
+      lines.push(`│   ${line}`);
+    }
+    if (err.code.split('\n').length > 10) {
+      lines.push(`│   ... (${err.code.split('\n').length - 10} more lines)`);
+    }
+    lines.push(`│`);
+    lines.push(`│ Common fixes:`);
+    lines.push(`│   • stateDiagram: Use single-line notes: note right of X : text`);
+    lines.push(`│   • Avoid backticks (\`) inside diagram text`);
+    lines.push(`│   • Use flowchart LR/TD for simpler diagrams`);
+    lines.push(`│   • See: https://mermaid.js.org/syntax/`);
+    lines.push(`└──────────────────────────────────────────────────────────────`);
+  }
+  
+  return lines.join('\n');
+}
+
 async function renderMarkdown(markdownContent: string): Promise<RenderedMarkdown> {
   let mermaidDetected = false;
+  const diagrams: MermaidDiagram[] = [];
+  let diagramIndex = 0;
+  
   const processed = markdownContent.replace(/```mermaid\s*([\s\S]*?)```/g, (_match, code) => {
     mermaidDetected = true;
     const trimmed = code.replace(/\s+$/, '');
+    diagrams.push({ index: diagramIndex++, code: trimmed });
     return `\n<div class="mermaid">${escapeHtml(trimmed)}</div>\n`;
   });
+
+  // Validate mermaid diagrams and report errors to stderr
+  if (diagrams.length > 0) {
+    const errors = validateMermaidDiagrams(diagrams);
+    if (errors.length > 0) {
+      emitWarning(`Found ${errors.length} mermaid diagram error(s):`);
+      process.stderr.write(formatMermaidErrors(errors) + '\n');
+    }
+  }
 
   const htmlBody = await marked.parse(processed);
   return {htmlBody, mermaidDetected};
@@ -146,8 +246,53 @@ async function renderHtmlDocument({title, body, theme}: HtmlDocumentInput, prese
   const headScripts = options.mermaidDetected
     ? '<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>'
     : '';
+  // Enhanced mermaid initialization with error handling and visual diagnostics
   const bodyScripts = options.mermaidDetected
-    ? '<script>if (window.mermaid) { mermaid.initialize({ startOnLoad: true, theme: "default" }); }</script>'
+    ? `<script>
+if (window.mermaid) {
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "default",
+    securityLevel: 'loose'
+  });
+  
+  document.querySelectorAll('.mermaid').forEach(async (el, index) => {
+    const code = el.textContent || '';
+    const id = 'mermaid-' + index;
+    try {
+      const { svg } = await mermaid.render(id, code);
+      el.innerHTML = svg;
+    } catch (err) {
+      // Display error visually in the document
+      const errorMsg = err.message || String(err);
+      el.innerHTML = '<div style="' +
+        'background: #fef2f2; border: 2px solid #ef4444; border-radius: 8px; ' +
+        'padding: 16px; margin: 16px 0; font-family: system-ui, sans-serif;">' +
+        '<div style="color: #dc2626; font-weight: 600; margin-bottom: 8px;">' +
+        '⚠️ Mermaid Diagram Error</div>' +
+        '<pre style="background: #fee2e2; padding: 12px; border-radius: 4px; ' +
+        'overflow-x: auto; margin: 8px 0; font-size: 13px; color: #991b1b;">' +
+        errorMsg.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>' +
+        '<details style="margin-top: 12px;">' +
+        '<summary style="cursor: pointer; color: #9ca3af; font-size: 12px;">Show diagram source</summary>' +
+        '<pre style="background: #f3f4f6; padding: 12px; border-radius: 4px; ' +
+        'margin-top: 8px; font-size: 12px; overflow-x: auto;">' +
+        code.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>' +
+        '</details>' +
+        '<div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #fecaca; ' +
+        'font-size: 12px; color: #6b7280;">' +
+        '<strong>Common fixes:</strong><br>' +
+        '• stateDiagram: Use <code>note right of X : text</code> (single line) instead of multi-line notes<br>' +
+        '• Avoid backticks inside diagram text<br>' +
+        '• Use flowchart LR/TD for simpler diagrams<br>' +
+        '• Check <a href="https://mermaid.js.org/syntax/stateDiagram.html" target="_blank">Mermaid docs</a>' +
+        '</div></div>';
+      console.error('Mermaid error in diagram ' + index + ':', errorMsg);
+      console.error('Source:', code);
+    }
+  });
+}
+</script>`
     : '';
 
   return Mustache.render(template, {
